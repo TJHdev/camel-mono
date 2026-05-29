@@ -9,3 +9,7 @@ snake_case_name
 SCREAMING_SNAKE
 PascalCaseExample
 iPhone
+userNameId
+whyWouldntYou
+
+hhhhhhhhhhhhhheNameOfDaBand
