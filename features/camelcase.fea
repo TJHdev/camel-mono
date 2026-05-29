@@ -1,0 +1,27 @@
+# CamelCase spacing for monospace fonts.
+#
+# Adds a visual gap at lowercase → uppercase boundaries (e.g. getUserName).
+# Glyphs shift inside their fixed advance width; column alignment is preserved.
+#
+# Compiled as PairPos (GPOS type 2) — simple, universally supported.
+# Registered in both `kern` (always on) and `ccas` (explicit control).
+#
+# UPM=1000, cell=600. Rule of thumb: 70 units ≈ 1px at 13px display size.
+# Current value: 80 units ≈ ~1.1px gap at 13px, ~2.2 physical px on Retina.
+
+@lower = [a b c d e f g h i j k l m n o p q r s t u v w x y z];
+@upper = [A B C D E F G H I J K L M N O P Q R S T U V W X Y Z];
+
+lookup camel_gap {
+    # Interleaved syntax: pos class1 <val1> class2 <val2>
+    # val1 = no shift on lowercase, val2 = shift uppercase right 80 units.
+    pos @lower <0 0 0 0> @upper <80 0 0 0>;
+} camel_gap;
+
+feature kern {
+    lookup camel_gap;
+} kern;
+
+feature ccas {
+    lookup camel_gap;
+} ccas;
