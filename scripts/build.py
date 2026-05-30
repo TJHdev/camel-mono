@@ -23,16 +23,15 @@ FONTLAB = VENDOR / "src" / "fonts" / "fontlab"
 DIST = ROOT / "dist"
 
 # Gap in font units (UPM=1000, cell=600). ~70 units ≈ 1px at 13px display size.
-CAMEL_GAP = 80
+CAMEL_GAP = 120
 
 FONT_NAME = "CamelMono"
 FAMILY_NAME = "Camel Mono"
 
-DEFAULT_STYLES = (
-    (400, "Regular"),
-    (400, "Italic"),
-    (700, "Regular"),
-    (700, "Italic"),
+WEIGHTS = range(200, 725, 25)  # 200, 225, 250, … 700
+
+DEFAULT_STYLES = tuple(
+    (w, s) for w in WEIGHTS for s in ("Regular", "Italic")
 )
 
 
@@ -49,31 +48,25 @@ def find_source(weight: int, style: str) -> Path:
 
 
 def style_names(weight: int, style: str) -> tuple[str, str, str]:
-    if weight >= 700 and style == "Italic":
-        subfamily = "Bold Italic"
-    elif weight >= 700:
-        subfamily = "Bold"
-    elif style == "Italic":
-        subfamily = "Italic"
-    else:
-        subfamily = "Regular"
-
-    full_name = FAMILY_NAME if subfamily == "Regular" else f"{FAMILY_NAME} {subfamily}"
-    postscript_name = f"{FONT_NAME}-{subfamily.replace(' ', '')}"
-    return subfamily, full_name, postscript_name
+    # Each weight lives in its own preferred family so editors list them all.
+    weight_family = f"{FAMILY_NAME} {weight}"
+    subfamily = "Italic" if style == "Italic" else "Regular"
+    full_name = f"{weight_family} {subfamily}" if style == "Italic" else weight_family
+    postscript_name = f"{FONT_NAME}-{weight}{style}"
+    return subfamily, full_name, postscript_name, weight_family
 
 
 def rename_font(font: TTFont, weight: int, style: str) -> None:
-    subfamily, full_name, postscript_name = style_names(weight, style)
+    subfamily, full_name, postscript_name, weight_family = style_names(weight, style)
     name_table = font["name"]
 
     replacements = {
-        1: FAMILY_NAME,
-        2: subfamily,
-        4: full_name,
-        6: postscript_name,
-        16: FAMILY_NAME,
-        17: subfamily,
+        1:  weight_family,   # Family name (legacy; one entry per weight)
+        2:  subfamily,       # Subfamily (Regular / Italic)
+        4:  full_name,       # Full name
+        6:  postscript_name, # PostScript name
+        16: weight_family,   # Preferred family (lets editors group by weight)
+        17: subfamily,       # Preferred subfamily
     }
 
     for name_id, value in replacements.items():
@@ -83,68 +76,54 @@ def rename_font(font: TTFont, weight: int, style: str) -> None:
     font["OS/2"].usWeightClass = weight
 
     selection = 0
-    if "Italic" in subfamily:
+    if style == "Italic":
         selection |= 1
-    if "Bold" in subfamily:
-        selection |= 1 << 5
     font["OS/2"].fsSelection = selection
 
     if "head" in font:
         mac_style = 0
-        if "Bold" in subfamily:
-            mac_style |= 1 << 0
-        if "Italic" in subfamily:
+        if style == "Italic":
             mac_style |= 1 << 1
         font["head"].macStyle = mac_style
 
     if "CFF " in font:
         top_dict = font["CFF "].cff.topDictIndex[0]
         top_dict.FullName = full_name
-        top_dict.FamilyName = FAMILY_NAME
-        if weight >= 700:
-            top_dict.Weight = "Bold"
-        elif style == "Italic":
-            top_dict.Weight = "Italic"
-        else:
-            top_dict.Weight = "Regular"
+        top_dict.FamilyName = weight_family
+        top_dict.Weight = str(weight)
 
 
-def create_camel_alternates(font: TTFont, gap: int) -> tuple[list[str], list[str]]:
+def make_shifted_alternates(
+    font: TTFont,
+    glyph_names: list[str],
+    shift: int,
+    suffix: str,
+) -> list[str]:
     """
-    For each A-Z glyph, create a .camel alternate whose outline is shifted
-    right by `gap` font units (same advance width — the gap is baked into the
-    glyph shape, not applied at render time via GPOS).
+    For each glyph in glyph_names, create a <name><suffix> alternate whose
+    outline is shifted horizontally by `shift` font units (positive = right,
+    negative = left). Advance width is unchanged.
 
-    Returns (original_names, alternate_names) sorted in the same order.
+    Returns the list of alternate glyph names in the same order.
     """
-    cmap = font.getBestCmap()
-    upper_names = sorted(
-        (cmap[ord(c)] for c in string.ascii_uppercase if ord(c) in cmap),
-        key=font.getGlyphOrder().index,
-    )
-
     top_dict = font["CFF "].cff.topDictIndex[0]
     cs = top_dict.CharStrings
     glyph_order = font.getGlyphOrder()
     alt_names: list[str] = []
 
-    for gname in upper_names:
-        alt = f"{gname}.camel"
+    for gname in glyph_names:
+        alt = f"{gname}{suffix}"
         adv_w = font["hmtx"].metrics[gname][0]
 
-        # Draw original glyph through a horizontal-shift transform into a new
-        # T2 charstring. RecordingPen inlines all subroutine calls first.
         rec = RecordingPen()
         cs[gname].draw(rec)
 
         t2 = T2CharStringPen(adv_w, cs)
-        xpen = TransformPen(t2, (1, 0, 0, 1, gap, 0))
+        xpen = TransformPen(t2, (1, 0, 0, 1, shift, 0))
         rec.replay(xpen)
 
         new_cs = t2.getCharString(private=cs[gname].private)
 
-        # Register in CFF: add name→index in the charStrings dict,
-        # then append the T2CharString to the underlying index.
         idx = cs.charStringsIndex
         cs.charStrings[alt] = len(idx.items)
         idx.items.append(new_cs)
@@ -153,44 +132,84 @@ def create_camel_alternates(font: TTFont, gap: int) -> tuple[list[str], list[str
         font["hmtx"].metrics[alt] = font["hmtx"].metrics[gname]
         alt_names.append(alt)
 
-    return upper_names, alt_names
+    return alt_names
 
 
-def build_camel_gsub(font: TTFont, upper_names: list[str], alt_names: list[str]) -> None:
+def create_camel_alternates(font: TTFont, gap: int) -> dict:
     """
-    Inject a GSUB contextual substitution: when [a-z] precedes [A-Z],
-    substitute the uppercase with its .camel alternate.
+    Create alternates for both sides of the camelCase boundary:
+      - .camelPre  for a-z: outline shifted LEFT  by gap//2
+      - .camel     for A-Z: outline shifted RIGHT by gap - gap//2
 
-    Because the gap is in the glyph outline (not a GPOS XPlacement),
-    pixel snapping cannot cause inconsistency.
+    Splitting the gap symmetrically across the boundary means neither
+    letter looks like it's drifting into its neighbour.
 
-    Feature 'calt' fires automatically; 'ccas' for explicit toggling.
+    Returns a dict with keys 'lower_orig', 'lower_alt', 'upper_orig', 'upper_alt'.
     """
     cmap = font.getBestCmap()
     lower_names = sorted(
         (cmap[ord(c)] for c in string.ascii_lowercase if ord(c) in cmap),
         key=font.getGlyphOrder().index,
     )
+    upper_names = sorted(
+        (cmap[ord(c)] for c in string.ascii_uppercase if ord(c) in cmap),
+        key=font.getGlyphOrder().index,
+    )
 
-    lower_str = " ".join(lower_names)
-    upper_str = " ".join(upper_names)
-    alt_str = " ".join(alt_names)
+    left_shift  = round(gap * 0.80)
+    right_shift = gap - left_shift
+    lower_alts = make_shifted_alternates(font, lower_names, shift=-left_shift,  suffix=".camelPre")
+    upper_alts = make_shifted_alternates(font, upper_names, shift=right_shift,  suffix=".camel")
+
+    return {
+        "lower_orig": lower_names,
+        "lower_alt":  lower_alts,
+        "upper_orig": upper_names,
+        "upper_alt":  upper_alts,
+    }
+
+
+def build_camel_gsub(font: TTFont, names: dict) -> None:
+    """
+    Inject two single-substitution lookups (one for each side of the boundary)
+    and one chaining contextual rule that fires both together.
+
+    When [a-z] is immediately followed by [A-Z]:
+      • the lowercase is replaced with its .camelPre alternate (shifted left)
+      • the uppercase is replaced with its .camel    alternate (shifted right)
+
+    Both replacements happen in one pass — no GPOS, no pixel snapping.
+    Feature 'calt' fires automatically; 'ccas' for explicit toggling.
+    """
+    lower_str     = " ".join(names["lower_orig"])
+    lower_alt_str = " ".join(names["lower_alt"])
+    upper_str     = " ".join(names["upper_orig"])
+    upper_alt_str = " ".join(names["upper_alt"])
 
     fea = f"""
-@lower = [{lower_str}];
-@upper = [{upper_str}];
-@upper_camel = [{alt_str}];
+@lower       = [{lower_str}];
+@lower_camel = [{lower_alt_str}];
+@upper       = [{upper_str}];
+@upper_camel = [{upper_alt_str}];
 
-lookup camel_subst {{
-    sub @lower @upper' by @upper_camel;
-}} camel_subst;
+lookup camel_lower_subst {{
+    sub @lower by @lower_camel;
+}} camel_lower_subst;
+
+lookup camel_upper_subst {{
+    sub @upper by @upper_camel;
+}} camel_upper_subst;
+
+lookup camel_chain {{
+    sub @lower' lookup camel_lower_subst @upper' lookup camel_upper_subst;
+}} camel_chain;
 
 feature calt {{
-    lookup camel_subst;
+    lookup camel_chain;
 }} calt;
 
 feature ccas {{
-    lookup camel_subst;
+    lookup camel_chain;
 }} ccas;
 """
 
@@ -204,8 +223,8 @@ feature ccas {{
 def build_one(weight: int, style: str, out_dir: Path) -> Path:
     source = find_source(weight, style)
     font = TTFont(source)
-    upper_names, alt_names = create_camel_alternates(font, CAMEL_GAP)
-    build_camel_gsub(font, upper_names, alt_names)
+    names = create_camel_alternates(font, CAMEL_GAP)
+    build_camel_gsub(font, names)
     rename_font(font, weight, style)
 
     output = out_dir / f"{FONT_NAME}-{weight}-{style}.otf"
