@@ -10,6 +10,12 @@ SCREAMING_SNAKE
 PascalCaseExample
 iPhone
 userNameId
-whyWouldntYou
 
-hhhhhhhhhhhhhheNameOfDaBand
+APIClient
+RenderingPipeline
+
+someGreatNewsItsMuchMoreReadable
+
+policyCountryConfiguration
+
+someVariable
