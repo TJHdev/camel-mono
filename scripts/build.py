@@ -137,26 +137,33 @@ def make_shifted_alternates(
 
 def create_camel_alternates(font: TTFont, gap: int) -> dict:
     """
-    Create alternates for both sides of each camelCase boundary:
-      - .camelPre  for a-z: outline shifted LEFT  by gap*0.80  (lowercase before uppercase)
-      - .camel     for A-Z: outline shifted RIGHT by gap*0.20  (uppercase starting a word)
-      - .camelPreU for A-Z: outline shifted LEFT  by gap*0.80  (uppercase ending an acronym,
-                                                                 e.g. the S in HTTPSConnection)
+    Create alternates for both sides of each camelCase boundary.
 
-    Splitting the gap symmetrically across the boundary means neither
-    letter looks like it's drifting into its neighbour.
+    Digits (0–9) are treated as uppercase-equivalent so that transitions like
+    lowercase→digit and digit→uppercase produce the same gap as letter boundaries.
+
+      - .camelPre  for a-z:   outline shifted LEFT  by gap*0.80
+      - .camel     for A-Z/0-9: outline shifted RIGHT by gap*0.20  (start of a word)
+      - .camelPreU for A-Z/0-9: outline shifted LEFT  by gap*0.80  (end of an acronym/number run)
+
+    Splitting the gap symmetrically means neither glyph drifts into its neighbour.
 
     Returns a dict with keys 'lower_orig', 'lower_alt', 'upper_orig', 'upper_alt',
-    'upper_pre_alt'.
+    'upper_pre_alt', 'digit_orig', 'digit_alt', 'digit_pre_alt'.
     """
     cmap = font.getBestCmap()
+    glyph_order = font.getGlyphOrder()
     lower_names = sorted(
         (cmap[ord(c)] for c in string.ascii_lowercase if ord(c) in cmap),
-        key=font.getGlyphOrder().index,
+        key=glyph_order.index,
     )
     upper_names = sorted(
         (cmap[ord(c)] for c in string.ascii_uppercase if ord(c) in cmap),
-        key=font.getGlyphOrder().index,
+        key=glyph_order.index,
+    )
+    digit_names = sorted(
+        (cmap[ord(c)] for c in string.digits if ord(c) in cmap),
+        key=glyph_order.index,
     )
 
     left_shift  = round(gap * 0.80)
@@ -164,6 +171,8 @@ def create_camel_alternates(font: TTFont, gap: int) -> dict:
     lower_alts     = make_shifted_alternates(font, lower_names, shift=-left_shift, suffix=".camelPre")
     upper_alts     = make_shifted_alternates(font, upper_names, shift=right_shift,  suffix=".camel")
     upper_pre_alts = make_shifted_alternates(font, upper_names, shift=-left_shift,  suffix=".camelPreU")
+    digit_alts     = make_shifted_alternates(font, digit_names, shift=right_shift,  suffix=".camel")
+    digit_pre_alts = make_shifted_alternates(font, digit_names, shift=-left_shift,  suffix=".camelPreU")
 
     return {
         "lower_orig":    lower_names,
@@ -171,55 +180,62 @@ def create_camel_alternates(font: TTFont, gap: int) -> dict:
         "upper_orig":    upper_names,
         "upper_alt":     upper_alts,
         "upper_pre_alt": upper_pre_alts,
+        "digit_orig":    digit_names,
+        "digit_alt":     digit_alts,
+        "digit_pre_alt": digit_pre_alts,
     }
 
 
 def build_camel_gsub(font: TTFont, names: dict) -> None:
     """
-    Inject substitution lookups and chaining contextual rules for two boundary patterns:
+    Inject substitution lookups and chaining contextual rules for two boundary patterns.
+    Digits (0–9) are treated as uppercase-equivalent throughout.
 
-    1. [a-z] immediately followed by [A-Z]  (e.g. camelCase, getUserName)
+    1. [a-z] immediately followed by [A-Z0-9]  (e.g. camelCase, getUserName, get2DPoint)
        • the lowercase gets its .camelPre  alternate (shifted left)
-       • the uppercase gets its .camel     alternate (shifted right)
+       • the uppercase/digit gets its .camel alternate (shifted right)
 
-    2. [A-Z] followed by [A-Z] followed by [a-z]  (e.g. HTTPSConnection → gap between S and C)
-       • the first uppercase gets its .camelPreU alternate (shifted left)
-       • the second uppercase gets its .camel    alternate (shifted right)
+    2. [A-Z0-9] followed by [A-Z0-9] followed by [a-z]
+       (e.g. HTTPSConnection → S|C, calculate2DTransform → D|T, get3DView → 3|D)
+       • the first glyph gets its .camelPreU alternate (shifted left)
+       • the second glyph gets its .camel    alternate (shifted right)
 
     Both replacements happen in one pass — no GPOS, no pixel snapping.
     Feature 'calt' fires automatically; 'ccas' for explicit toggling.
     """
-    lower_str         = " ".join(names["lower_orig"])
-    lower_alt_str     = " ".join(names["lower_alt"])
-    upper_str         = " ".join(names["upper_orig"])
-    upper_alt_str     = " ".join(names["upper_alt"])
-    upper_pre_alt_str = " ".join(names["upper_pre_alt"])
+    lower_str     = " ".join(names["lower_orig"])
+    lower_alt_str = " ".join(names["lower_alt"])
+
+    # Uppercase letters and digits combined into a single "upper-equivalent" class.
+    upper_ext_str     = " ".join(names["upper_orig"] + names["digit_orig"])
+    upper_ext_alt_str = " ".join(names["upper_alt"]  + names["digit_alt"])
+    upper_ext_pre_str = " ".join(names["upper_pre_alt"] + names["digit_pre_alt"])
 
     fea = f"""
-@lower            = [{lower_str}];
-@lower_camel      = [{lower_alt_str}];
-@upper            = [{upper_str}];
-@upper_camel      = [{upper_alt_str}];
-@upper_camel_pre  = [{upper_pre_alt_str}];
+@lower           = [{lower_str}];
+@lower_camel     = [{lower_alt_str}];
+@upper_ext       = [{upper_ext_str}];
+@upper_ext_camel = [{upper_ext_alt_str}];
+@upper_ext_pre   = [{upper_ext_pre_str}];
 
 lookup camel_lower_subst {{
     sub @lower by @lower_camel;
 }} camel_lower_subst;
 
 lookup camel_upper_subst {{
-    sub @upper by @upper_camel;
+    sub @upper_ext by @upper_ext_camel;
 }} camel_upper_subst;
 
 lookup camel_upper_pre_subst {{
-    sub @upper by @upper_camel_pre;
+    sub @upper_ext by @upper_ext_pre;
 }} camel_upper_pre_subst;
 
 lookup camel_chain {{
-    sub @lower' lookup camel_lower_subst @upper' lookup camel_upper_subst;
+    sub @lower' lookup camel_lower_subst @upper_ext' lookup camel_upper_subst;
 }} camel_chain;
 
 lookup camel_upper_chain {{
-    sub @upper' lookup camel_upper_pre_subst @upper' lookup camel_upper_subst @lower;
+    sub @upper_ext' lookup camel_upper_pre_subst @upper_ext' lookup camel_upper_subst @lower;
 }} camel_upper_chain;
 
 feature calt {{
