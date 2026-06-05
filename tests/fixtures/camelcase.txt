@@ -14,6 +14,8 @@ userNameId
 APIClient
 RenderingPipeline
 
+Some25WaysToWinABoat
+
 123Asa23Testing
 
 someGreatNewsItsMuchMoreReadable
@@ -21,3 +23,10 @@ someGreatNewsItsMuchMoreReadable
 policyCountryConfiguration
 
 someVariable
+
+longVariableNameExample
+
+q9DoYouReceivePaymentsFromAPension
+q1oDoYouReceivePaymentsFromAPension
+
+
