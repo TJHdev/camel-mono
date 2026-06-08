@@ -165,8 +165,7 @@ def create_camel_alternates(font: TTFont, gap: int) -> dict:
         (cmap[ord(c)] for c in string.digits if ord(c) in cmap),
         key=glyph_order.index,
     )
-
-    left_shift  = round(gap * 0.80)
+    left_shift  = round(gap * 0.64)
     right_shift = gap - left_shift
     # Midpoint shift for glyphs at both sides of two adjacent boundaries (e.g. the 9 in
     # q9Do, or the A in fromAPension). Splits the gap equally: 60 units on each side.
@@ -180,6 +179,22 @@ def create_camel_alternates(font: TTFont, gap: int) -> dict:
     digit_pre_alts  = make_shifted_alternates(font, digit_names, shift=-left_shift,   suffix=".camelPreU")
     digit_both_alts = make_shifted_alternates(font, digit_names, shift=both_shift,    suffix=".camelBoth")
 
+    # Backtrack class: any printable ASCII glyph, including all camel alternates.
+    # A non-empty backtrack means the rule only fires when at least one glyph precedes
+    # the left-shifting character. At the start of a glyph run (line start) there is no
+    # preceding glyph, so the backtrack fails and no leftward nudge is applied.
+    # The alternates must be included because earlier lookups in the same shaping pass
+    # will have already substituted some glyphs (e.g. T → T.camel), and the backtrack
+    # must match those substituted names for subsequent boundaries in the same identifier.
+    all_alts = (
+        lower_alts + upper_alts + upper_pre_alts + upper_both_alts
+        + digit_alts + digit_pre_alts + digit_both_alts
+    )
+    word_before = sorted(
+        {cmap[cp] for cp in range(0x20, 0x7F) if cp in cmap} | set(all_alts),
+        key=glyph_order.index,
+    )
+
     return {
         "lower_orig":     lower_names,
         "lower_alt":      lower_alts,
@@ -191,6 +206,7 @@ def create_camel_alternates(font: TTFont, gap: int) -> dict:
         "digit_alt":      digit_alts,
         "digit_pre_alt":  digit_pre_alts,
         "digit_both_alt": digit_both_alts,
+        "word_before":    word_before,
     }
 
 
@@ -228,6 +244,11 @@ def build_camel_gsub(font: TTFont, names: dict) -> None:
     upper_ext_alt_str  = " ".join(names["upper_alt"]      + names["digit_alt"])
     upper_ext_pre_str  = " ".join(names["upper_pre_alt"]  + names["digit_pre_alt"])
     upper_ext_both_str = " ".join(names["upper_both_alt"] + names["digit_both_alt"])
+    # Backtrack class: any printable ASCII character. A non-empty backtrack means the
+    # rule only fires when at least one glyph precedes the left-shifting character.
+    # At the start of a glyph run (line start) there is no preceding glyph, so the
+    # backtrack fails and no leftward nudge is applied to the first visible character.
+    word_before_str    = " ".join(names["word_before"])
 
     fea = f"""
 @lower            = [{lower_str}];
@@ -236,6 +257,7 @@ def build_camel_gsub(font: TTFont, names: dict) -> None:
 @upper_ext_camel  = [{upper_ext_alt_str}];
 @upper_ext_pre    = [{upper_ext_pre_str}];
 @upper_ext_both   = [{upper_ext_both_str}];
+@word_before      = [{word_before_str}];
 
 lookup camel_lower_subst {{
     sub @lower by @lower_camel;
@@ -254,15 +276,15 @@ lookup camel_upper_both_subst {{
 }} camel_upper_both_subst;
 
 lookup camel_lower_upper_upper_chain {{
-    sub @lower' lookup camel_lower_subst @upper_ext' lookup camel_upper_both_subst @upper_ext' lookup camel_upper_subst @lower;
+    sub @word_before @lower' lookup camel_lower_subst @upper_ext' lookup camel_upper_both_subst @upper_ext' lookup camel_upper_subst @lower;
 }} camel_lower_upper_upper_chain;
 
 lookup camel_upper_chain {{
-    sub @upper_ext' lookup camel_upper_pre_subst @upper_ext' lookup camel_upper_subst @lower;
+    sub @word_before @upper_ext' lookup camel_upper_pre_subst @upper_ext' lookup camel_upper_subst @lower;
 }} camel_upper_chain;
 
 lookup camel_chain {{
-    sub @lower' lookup camel_lower_subst @upper_ext' lookup camel_upper_subst;
+    sub @word_before @lower' lookup camel_lower_subst @upper_ext' lookup camel_upper_subst;
 }} camel_chain;
 
 feature calt {{
