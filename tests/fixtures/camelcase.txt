@@ -1,29 +1,23 @@
 getUserName
-parseHTMLDocument
-XMLHttpRequest
 HTTPSConnection
 macOSVersion
 userID
-calculate2DTransform
 snake_case_name
 SCREAMING_SNAKE
-PascalCaseExample
 iPhone
 userNameId
 
 APIClient
 RenderingPipeline
 
-someGreatNewsItsMuchMoreReadable
-policyCountryConfiguration
 
 someVariable
 
+
+
 longVariableNameExample
-
-q1DoYouReceivePaymentsFromAPension
-q10DoYouReceivePaymentsFromAPension
-
-...testingSomethingNew
-
-
+PascalCaseExample
+calculate2DTransform
+XMLHttpRequest
+parseHTMLDocument
+itsEasierOnTheEyes
