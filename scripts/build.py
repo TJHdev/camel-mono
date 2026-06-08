@@ -27,6 +27,7 @@ CAMEL_GAP = 120
 
 FONT_NAME = "CamelMono"
 FAMILY_NAME = "Camel Mono"
+VERSION = 1
 
 WEIGHTS = range(200, 725, 25)  # 200, 225, 250, … 700
 
@@ -52,7 +53,7 @@ def style_names(weight: int, style: str) -> tuple[str, str, str]:
     weight_family = f"{FAMILY_NAME} {weight}"
     subfamily = "Italic" if style == "Italic" else "Regular"
     full_name = f"{weight_family} {subfamily}" if style == "Italic" else weight_family
-    postscript_name = f"{FONT_NAME}-{weight}{style}"
+    postscript_name = f"{FONT_NAME}V{VERSION}-{weight}{style}"
     return subfamily, full_name, postscript_name, weight_family
 
 
@@ -314,7 +315,7 @@ def build_one(weight: int, style: str, out_dir: Path) -> Path:
     build_camel_gsub(font, names)
     rename_font(font, weight, style)
 
-    output = out_dir / f"{FONT_NAME}-{weight}-{style}.otf"
+    output = out_dir / f"{FONT_NAME}V{VERSION}-{weight}{style}.otf"
     font.save(output)
     return output
 
@@ -323,7 +324,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",
-        type=Path,
+        type=lambda p: Path(p).resolve(),
         default=DIST,
         help="Output directory (default: dist/)",
     )
