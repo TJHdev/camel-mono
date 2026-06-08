@@ -1,10 +1,18 @@
 # Camel Mono
 
-A derivative of [Commit Mono](https://github.com/eigilnikolajsen/commit-mono) with an optional OpenType feature that adds subtle gaps at camelCase word boundaries (`getUserName` reads more like `get User Name`).
+![Camel Mono example](example.gif)
 
-Column alignment stays monospace: glyphs shift inside their fixed-width cells, using the same GPOS technique as Commit Mono smart kerning.
+`snake_case` is easier to read than `camelCase` — the underscores act as visible word separators, so your eye doesn't have to hunt for case transitions. But you can't always choose: the language, the codebase, or the team already uses camelCase, and you're not going to rename everything.
+
+Camel Mono is a derivative of [Commit Mono](https://github.com/eigilnikolajsen/commit-mono) that adds subtle gaps at camelCase word boundaries, so `getUserName` reads more like `get User Name`. You get the visual clarity of snake_case without touching the code.
+
+Column alignment stays monospace: glyphs shift inside their fixed-width cells using GSUB contextual substitution — pre-shifted alternate glyphs are selected at each boundary.
 
 ## Quick start
+
+Pre-built fonts are in `fonts/`. Install the `.otf` files on your system like any other font (Windows, macOS, Linux).
+
+To build from source:
 
 ```bash
 # 1. Fetch Commit Mono sources (cloned into vendor/, gitignored)
@@ -21,16 +29,17 @@ python scripts/build.py
 
 Built fonts land in `dist/`:
 
-- `CamelMono-400-Regular.otf`
-- `CamelMono-400-Italic.otf`
-- `CamelMono-700-Regular.otf`
-- `CamelMono-700-Italic.otf`
-
-Install the `.otf` files on your system like any other font (Windows, macOS, Linux).
+- `CamelMonoV1-400Regular.otf`
+- `CamelMonoV1-400Italic.otf`
+- `CamelMonoV1-700Regular.otf`
+- `CamelMonoV1-700Italic.otf`
+- … (all weights 200–700 in steps of 25 by default)
 
 ## Enable camelCase spacing
 
-The feature tag is `ccas`. Commit Mono’s smart kerning (`ss05`) is preserved — enable both if you want:
+The feature fires automatically via `calt` (contextual alternates), which most editors enable by default — no configuration needed.
+
+For explicit control, use feature tag `ccas`. To keep both:
 
 ```json
 "editor.fontLigatures": "'ss05', 'ccas'"
@@ -47,7 +56,7 @@ The feature tag is `ccas`. Commit Mono’s smart kerning (`ss05`) is preserved �
 
 **JetBrains IDEs** — Settings → Editor → Font → Enable font features → add `ccas`.
 
-**Neovim (Kitty)** — `font_features CamelMono +ccas`
+**Neovim (Kitty)** — `font_features CamelMonoV1 +ccas`
 
 **CSS**
 
@@ -56,23 +65,37 @@ font-family: "Camel Mono", monospace;
 font-feature-settings: "ccas" 1;
 ```
 
+## Boundary patterns
+
+Three boundary types are recognised:
+
+| Pattern | Example | Description |
+|---------|---------|-------------|
+| `[a-z][A-Z0-9]` | `getUserName`, `get2DPoint` | Standard camelCase |
+| `[A-Z0-9][A-Z0-9]…[a-z]` | `HTTPSConnection` | Acronym/number run into lowercase |
+| `[a-z][A-Z0-9][A-Z0-9]…[a-z]` | `fromAPension`, `q9Do` | Lowercase into acronym start |
+
+Digits are treated as uppercase-equivalent, so `get2DPoint` and `q19Do` produce the same gap as letter boundaries.
+
 ## Project layout
 
 ```text
-features/camelcase.fea   # OpenType rules (edit gap size here)
-scripts/build.py         # Merge feature into Commit Mono OTFs
+features/camelcase.fea   # Reference GPOS implementation (not used by build)
+scripts/build.py         # Generates GSUB alternates and merges into Commit Mono OTFs
 scripts/fetch_sources.sh # Clone upstream Commit Mono
 tests/fixtures/          # Sample identifiers for visual checks
-vendor/commit-mono/      # Upstream sources (not committed)
-dist/                    # Built fonts (not committed)
+fonts/                   # Pre-built released fonts (committed)
 ```
 
 ## Tuning the gap
 
-Edit `features/camelcase.fea`. The current values split a ~30 unit gap across the pair:
+Edit `CAMEL_GAP` in `scripts/build.py`. The default is 120 font units (UPM=1000, cell=600 — roughly 1.7px at 13px display size on a Retina screen).
 
-- lowercase shifts left by 12 units before an uppercase letter
-- uppercase shifts right by 18 units after a lowercase letter
+The gap is split across the boundary pair:
+
+- The glyph **before** the boundary shifts left by ~77 units (64%)
+- The glyph **at the start** of the new word shifts right by ~43 units (36%)
+- Glyphs at both sides of two adjacent boundaries (e.g. the `A` in `fromAPension`) get a midpoint shift to split both gaps evenly
 
 Rebuild with `python scripts/build.py`.
 
@@ -82,9 +105,14 @@ Rebuild with `python scripts/build.py`.
 # Only regular 400
 python scripts/build.py --weight 400 --style Regular
 
+# Specific weights and styles (flags are repeatable)
+python scripts/build.py --weight 400 --weight 700 --style Regular --style Italic
+
 # Custom output directory
 python scripts/build.py --output /tmp/camelmono
 ```
+
+With no flags, all 22 weights (200–700 in steps of 25) × 2 styles = 44 fonts are built.
 
 ## License
 
