@@ -12,6 +12,8 @@ Column alignment stays monospace: glyphs shift inside their fixed-width cells us
 
 Pre-built fonts are in `fonts/`. Install the `.otf` files on your system like any other font (Windows, macOS, Linux).
 
+[Camel Mono 400 download link](https://raw.githubusercontent.com/TJHdev/camel-mono/main/fonts/CamelMonoV1-400Regular.otf)
+
 ## Enable camelCase spacing
 
 The feature fires automatically via `calt` (contextual alternates), which most editors enable by default — no configuration needed.
@@ -37,9 +39,11 @@ For explicit control, use feature tag `ccas`. To keep both:
 **Neovim (Kitty)** — `font_features CamelMonoV1-400Regular +ccas`
 
 **Ghostty**
+```
 font-family = Camel Mono 400
 font-size = 13
 font-feature = ccas
+```
 
 **CSS**
 
