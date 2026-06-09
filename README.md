@@ -36,6 +36,11 @@ For explicit control, use feature tag `ccas`. To keep both:
 
 **Neovim (Kitty)** — `font_features CamelMonoV1-400Regular +ccas`
 
+**Ghostty**
+font-family = Camel Mono 400
+font-size = 13
+font-feature = ccas
+
 **CSS**
 
 ```css
