@@ -6,7 +6,7 @@ Motivation - after watching a [Syntax](https://www.youtube.com/@syntaxfm) epsiod
 
 Camel Mono is the result of that thought experiment. It is a derivative of [Commit Mono](https://github.com/eigilnikolajsen/commit-mono) that adds subtle gaps at `camelCase` word boundaries, so `getUserName` reads more like `get User Name`. You get the visual clarity of `snake_case` without changing the code.
 
-Column alignment stays monospace: glyphs shift inside their fixed-width cells using GSUB contextual substitution — pre-shifted alternate glyphs are selected at each boundary.
+Column alignment stays monospace: glyphs shift inside their fixed-width cells using GSUB contextual substitution, pre-shifted alternate glyphs are selected at each boundary.
 
 ## Installation
 
@@ -16,40 +16,45 @@ Pre-built fonts are in `fonts/`. Install the `.otf` files on your system like an
 
 ## Enable camelCase spacing
 
-The feature fires automatically via `calt` (contextual alternates), which most editors enable by default — no configuration needed.
-
-For explicit control, use feature tag `ccas`. To keep both:
+The feature fires automatically via `calt` (contextual alternates), which most editors enable by default, no configuration needed.
 
 ```json
 "editor.fontFamily": "Camel Mono 400",
 "editor.fontLigatures": "'calt'",
 ```
 
-**VS Code**
+**VS Code / cursor**
 
 ```json
 {
   "editor.fontFamily": "Camel Mono 400",
-  "editor.fontLigatures": "'ccas'"
+  "editor.fontLigatures": "'calt'"
 }
 ```
 
-**JetBrains IDEs** — Settings → Editor → Font → Enable font features → add `ccas`.
+**JetBrains IDEs** 
+```
+Settings → Editor → Font → Enable font features → add `calt`.
+```
 
-**Neovim (Kitty)** — `font_features CamelMonoV1-400Regular +ccas`
+
+**Neovim (Kitty)** 
+```
+font_features CamelMonoV1-400Regular +calt
+```
 
 **Ghostty**
 ```
 font-family = Camel Mono 400
 font-size = 13
-font-feature = ccas
+font-feature = calt
 ```
 
 **CSS**
 
 ```css
 font-family: "Camel Mono 400", monospace;
-font-feature-settings: "ccas" 1;
+font-feature-settings: "calt" 1;
 ```
 
 ## Boundary patterns
